@@ -138,6 +138,7 @@ import { MSG_NAMESPACE, WalletConfig } from "./shared";
     if (patchesInstalled) return;
     patchesInstalled = true;
     patchFetch();
+    patchXHR();
     patchWebSocket();
   }
 
@@ -229,6 +230,84 @@ import { MSG_NAMESPACE, WalletConfig } from "./shared";
       }
       return origFetch(input, init);
     };
+  }
+
+  // The app broadcasts with axios (`axios.post`), which uses XMLHttpRequest in
+  // the browser, not fetch. So the fetch patch above never sees the broadcast;
+  // this mirrors it over XHR, which is the path that actually carries the POST.
+  function patchXHR(): void {
+    const OrigXHR = window.XMLHttpRequest;
+    class PatchedXHR extends OrigXHR {
+      private osmoMethod = "GET";
+      private osmoUrl = "";
+
+      open(method: string, url: string | URL, ...rest: unknown[]): void {
+        this.osmoMethod = method.toUpperCase();
+        this.osmoUrl = String(url);
+        // @ts-expect-error forward the remaining native args unchanged
+        super.open(method, url, ...rest);
+      }
+
+      send(body?: Document | XMLHttpRequestBodyInit | null): void {
+        if (mockEnabled && this.intercept(body)) return;
+        super.send(body);
+      }
+
+      private intercept(body?: Document | XMLHttpRequestBodyInit | null): boolean {
+        if (
+          this.osmoMethod === "POST" &&
+          /\/api\/broadcast-transaction\b/.test(this.osmoUrl)
+        ) {
+          let txBytes = "";
+          try {
+            if (typeof body === "string") txBytes = JSON.parse(body).tx_bytes;
+          } catch {
+            /* leave empty */
+          }
+          void (async () => {
+            const hash = await sha256HexUpper(txBytes);
+            broadcastHashes.add(hash);
+            this.fulfill(successTxResponse(hash));
+          })();
+          return true;
+        }
+
+        const restTx = /\/cosmos\/tx\/v1beta1\/txs\/([0-9A-Fa-f]+)\b/.exec(this.osmoUrl);
+        if (
+          this.osmoMethod === "GET" &&
+          restTx &&
+          broadcastHashes.has(restTx[1].toUpperCase())
+        ) {
+          this.fulfill(successTxResponse(restTx[1].toUpperCase()));
+          return true;
+        }
+        return false;
+      }
+
+      // Shadow the native response getters with our own values, then fire the
+      // events axios listens for. We never call super.send, so no request goes out.
+      private fulfill(payload: object): void {
+        const text = JSON.stringify(payload);
+        const set = (prop: string, value: unknown) =>
+          Object.defineProperty(this, prop, { value, configurable: true });
+        set("readyState", 4);
+        set("status", 200);
+        set("statusText", "OK");
+        set("response", text);
+        set("responseText", text);
+        set("responseURL", this.osmoUrl);
+        set("getAllResponseHeaders", () => "content-type: application/json\r\n");
+        set("getResponseHeader", (name: string) =>
+          /content-type/i.test(name) ? "application/json" : null
+        );
+        setTimeout(() => {
+          this.dispatchEvent(new Event("readystatechange"));
+          this.dispatchEvent(new ProgressEvent("load"));
+          this.dispatchEvent(new ProgressEvent("loadend"));
+        }, 0);
+      }
+    }
+    window.XMLHttpRequest = PatchedXHR as unknown as typeof XMLHttpRequest;
   }
 
   function patchWebSocket(): void {
