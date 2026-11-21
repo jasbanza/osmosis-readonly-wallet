@@ -10,6 +10,7 @@ mkdirSync("dist", { recursive: true });
 function copyStatic() {
   cpSync("manifest.json", "dist/manifest.json");
   cpSync("src/popup.html", "dist/popup.html");
+  cpSync("icons", "dist/icons", { recursive: true });
 }
 
 const options = {
