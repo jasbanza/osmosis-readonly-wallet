@@ -1,0 +1,44 @@
+{
+  "manifest_version": 3,
+  "name": "Osmosis Read-Only Wallet",
+  "version": "0.1.0",
+  "description": "Paste an address and browse Osmosis read-only as that user: real balances and real gas estimates. No keys; nothing is broadcast.",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Osmosis Read-Only Wallet"
+  },
+  "permissions": ["storage", "management"],
+  "host_permissions": [
+    "https://app.osmosis.zone/*",
+    "https://*.osmosis.zone/*",
+    "https://*.dev-osmosis.zone/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://app.osmosis.zone/*",
+        "https://*.osmosis.zone/*",
+        "https://*.dev-osmosis.zone/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+      ],
+      "js": ["provider.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://app.osmosis.zone/*",
+        "https://*.osmosis.zone/*",
+        "https://*.dev-osmosis.zone/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+      ],
+      "js": ["bridge.js"],
+      "run_at": "document_start",
+      "world": "ISOLATED"
+    }
+  ]
+}

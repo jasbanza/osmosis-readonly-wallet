@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Osmosis Read-Only Wallet</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0e0f1a;
+        --panel: #181a2a;
+        --border: #2a2d44;
+        --text: #e8e9f3;
+        --muted: #9a9cb8;
+        --accent: #7d5cff;
+        --danger: #ff6b6b;
+        --warn-bg: #3a2a12;
+        --warn-border: #7a5a1e;
+        --warn-text: #ffcf8a;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        width: 460px;
+        font: 13px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+      header {
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--border);
+      }
+      header h1 { margin: 0; font-size: 14px; }
+      header p { margin: 2px 0 0; color: var(--muted); font-size: 11px; }
+      main { padding: 12px 14px; }
+      .banner {
+        display: none;
+        margin-bottom: 10px;
+        padding: 8px 10px;
+        border-radius: 8px;
+        background: var(--warn-bg);
+        border: 1px solid var(--warn-border);
+        color: var(--warn-text);
+        font-size: 12px;
+      }
+      .banner.show { display: block; }
+      .banner button {
+        margin-top: 6px;
+        font-size: 11px;
+        padding: 3px 8px;
+      }
+      table { width: 100%; border-collapse: collapse; }
+      th {
+        text-align: left;
+        font-weight: 600;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--muted);
+        padding: 4px 6px;
+      }
+      td { padding: 6px; border-top: 1px solid var(--border); vertical-align: middle; }
+      td.center, th.center { text-align: center; width: 1%; white-space: nowrap; }
+      .addr { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px; }
+      .addr .label { color: var(--muted); font-size: 11px; font-family: system-ui, sans-serif; }
+      .empty { color: var(--muted); padding: 14px 6px; text-align: center; }
+      .remove {
+        background: none;
+        border: none;
+        color: var(--muted);
+        cursor: pointer;
+        font-size: 14px;
+        line-height: 1;
+      }
+      .remove:hover { color: var(--danger); }
+      form.add { display: flex; gap: 6px; margin-top: 12px; }
+      input[type="text"] {
+        flex: 1;
+        min-width: 0;
+        padding: 7px 9px;
+        border-radius: 7px;
+        border: 1px solid var(--border);
+        background: var(--panel);
+        color: var(--text);
+        font-family: ui-monospace, monospace;
+        font-size: 11px;
+      }
+      input[type="text"].label-input { flex: 0 0 110px; font-family: system-ui, sans-serif; }
+      button.primary {
+        padding: 7px 12px;
+        border-radius: 7px;
+        border: none;
+        background: var(--accent);
+        color: #fff;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button.primary:hover { filter: brightness(1.1); }
+      .error { color: var(--danger); font-size: 11px; min-height: 14px; margin-top: 6px; }
+      .hint { color: var(--muted); font-size: 11px; margin-top: 10px; }
+      accent { color: var(--accent); }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Osmosis Read-Only Wallet</h1>
+      <p>Pick an address to impersonate as Keplr. Read-only &mdash; nothing is broadcast.</p>
+    </header>
+    <main>
+      <div id="keplr-banner" class="banner">
+        A real <strong>Keplr</strong> extension is enabled and will conflict with this one.
+        Disable it (or use a separate Chrome profile) for impersonation to work.
+        <br /><button id="disable-keplr" class="primary">Disable Keplr</button>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th class="center">Active</th>
+            <th>Address</th>
+            <th class="center" title="Fake a successful transaction without touching chain">Mock&nbsp;tx</th>
+            <th class="center"></th>
+          </tr>
+        </thead>
+        <tbody id="rows"></tbody>
+      </table>
+
+      <form class="add" id="add-form">
+        <input type="text" id="label-input" class="label-input" placeholder="label (optional)" />
+        <input type="text" id="address-input" placeholder="osmo1…" autocomplete="off" spellcheck="false" />
+        <button type="submit" class="primary">Add</button>
+      </form>
+      <div class="error" id="error"></div>
+      <div class="hint">
+        Select <strong>Keplr</strong> in the app's connect dialog. Switching the active row
+        updates the connected app without a reload.
+      </div>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>
