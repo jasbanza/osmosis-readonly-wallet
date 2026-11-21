@@ -12,12 +12,13 @@ import {
   bech32ToBytes,
   bytesToBase64,
   dummyPubKey,
+  normalizeState,
   toHex,
 } from "./shared";
 
 async function readState(): Promise<StorageState> {
   const result = await chrome.storage.local.get(STORAGE_KEY);
-  return result[STORAGE_KEY] ?? { addresses: [], activeAddress: null };
+  return normalizeState(result[STORAGE_KEY]);
 }
 
 async function buildConfig(state: StorageState): Promise<WalletConfig | null> {
@@ -38,15 +39,16 @@ async function buildConfig(state: StorageState): Promise<WalletConfig | null> {
   };
 }
 
-function postConfig(config: WalletConfig | null): void {
+function postConfig(overrideEnabled: boolean, wallet: WalletConfig | null): void {
   window.postMessage(
-    { __ns: MSG_NAMESPACE, kind: "config", config },
+    { __ns: MSG_NAMESPACE, kind: "config", overrideEnabled, wallet },
     window.location.origin
   );
 }
 
 async function pushConfig(): Promise<void> {
-  postConfig(await buildConfig(await readState()));
+  const state = await readState();
+  postConfig(state.overrideEnabled, await buildConfig(state));
 }
 
 // The provider announces itself once it is ready to receive config.

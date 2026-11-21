@@ -21,6 +21,17 @@ export interface SavedAddress {
 export interface StorageState {
   addresses: SavedAddress[];
   activeAddress: string | null;
+  /** When false, the provider stays inert and the real Keplr is handed control. */
+  overrideEnabled: boolean;
+}
+
+export function emptyState(): StorageState {
+  return { addresses: [], activeAddress: null, overrideEnabled: true };
+}
+
+/** Fill in any fields missing from older stored state. */
+export function normalizeState(stored: Partial<StorageState> | undefined): StorageState {
+  return { ...emptyState(), ...(stored ?? {}) };
 }
 
 /** What the bridge computes and hands to the provider for the active address. */

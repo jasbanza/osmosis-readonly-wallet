@@ -1,24 +1,46 @@
 /**
- * Popup logic: the single-page table of saved addresses. It reads and writes
- * chrome.storage.local; the bridge content script picks up every change and
- * relays it to the page provider.
+ * Popup logic: the single-page table of saved addresses plus the override
+ * toggle. It reads and writes chrome.storage.local; the bridge content script
+ * relays every change to the page provider. Toggling the override also enables
+ * or disables the real Keplr extension and reloads open Osmosis tabs so the
+ * swap of window.keplr owners actually takes effect.
  */
-import { STORAGE_KEY, SavedAddress, StorageState, isValidOsmoAddress } from "./shared";
+import {
+  STORAGE_KEY,
+  SavedAddress,
+  StorageState,
+  isValidOsmoAddress,
+  normalizeState,
+} from "./shared";
 
-/** Known Keplr extension IDs, for the conflict banner. */
+/** Known Keplr extension IDs, matched alongside the name. */
 const KEPLR_IDS = new Set(["dmkamcknogkgcdfhhbddcghachkejeap"]);
 
+/** The osmosis hosts our content scripts run on (for reloads). */
+const OSMOSIS_URLS = [
+  "https://app.osmosis.zone/*",
+  "https://*.osmosis.zone/*",
+  "https://*.dev-osmosis.zone/*",
+  "http://localhost/*",
+  "http://127.0.0.1/*",
+];
+
 const rowsEl = document.getElementById("rows") as HTMLTableSectionElement;
+const tableEl = document.getElementById("table") as HTMLTableElement;
 const addForm = document.getElementById("add-form") as HTMLFormElement;
 const addressInput = document.getElementById("address-input") as HTMLInputElement;
 const labelInput = document.getElementById("label-input") as HTMLInputElement;
 const errorEl = document.getElementById("error") as HTMLDivElement;
 const bannerEl = document.getElementById("keplr-banner") as HTMLDivElement;
 const disableKeplrBtn = document.getElementById("disable-keplr") as HTMLButtonElement;
+const modeEl = document.getElementById("mode") as HTMLDivElement;
+const modeTitle = document.getElementById("mode-title") as HTMLSpanElement;
+const modeSub = document.getElementById("mode-sub") as HTMLSpanElement;
+const toggleBtn = document.getElementById("toggle") as HTMLButtonElement;
 
 async function readState(): Promise<StorageState> {
   const result = await chrome.storage.local.get(STORAGE_KEY);
-  return result[STORAGE_KEY] ?? { addresses: [], activeAddress: null };
+  return normalizeState(result[STORAGE_KEY]);
 }
 
 async function writeState(state: StorageState): Promise<void> {
@@ -30,6 +52,18 @@ function shorten(address: string): string {
 }
 
 function render(state: StorageState): void {
+  // Override mode banner / border.
+  const on = state.overrideEnabled;
+  document.body.classList.toggle("override-off", !on);
+  modeEl.classList.toggle("on", on);
+  modeEl.classList.toggle("off", !on);
+  modeTitle.textContent = on ? "Mock wallet active" : "Mock wallet off — Keplr active";
+  modeSub.textContent = on
+    ? "Reading as the selected address."
+    : "The real Keplr extension is in control.";
+  toggleBtn.textContent = on ? "Hand to Keplr" : "Re-enable mock";
+  tableEl.classList.toggle("dim", !on);
+
   rowsEl.replaceChildren();
 
   if (state.addresses.length === 0) {
@@ -52,6 +86,7 @@ function render(state: StorageState): void {
     radio.type = "radio";
     radio.name = "active";
     radio.checked = state.activeAddress === entry.address;
+    radio.disabled = !on;
     radio.addEventListener("change", () => void setActive(entry.address));
     activeTd.appendChild(radio);
 
@@ -90,7 +125,9 @@ function render(state: StorageState): void {
 }
 
 async function refresh(): Promise<void> {
-  render(await readState());
+  const state = await readState();
+  render(state);
+  await updateBanner(state);
 }
 
 async function setActive(address: string): Promise<void> {
@@ -139,31 +176,72 @@ addForm.addEventListener("submit", async (event) => {
   await refresh();
 });
 
-async function checkKeplrConflict(): Promise<void> {
-  if (!chrome.management?.getAll) return;
+// --- Override toggle ---------------------------------------------------------
+
+async function findKeplr(): Promise<chrome.management.ExtensionInfo | undefined> {
+  if (!chrome.management?.getAll) return undefined;
   try {
     const all = await chrome.management.getAll();
-    const keplr = all.find(
+    return all.find(
       (ext) =>
-        ext.enabled &&
         ext.id !== chrome.runtime.id &&
-        (KEPLR_IDS.has(ext.id) || /keplr/i.test(ext.name))
+        (KEPLR_IDS.has(ext.id) || /keplr/i.test(ext.name)) &&
+        ext.type === "extension"
     );
-    if (keplr) {
-      bannerEl.classList.add("show");
-      disableKeplrBtn.onclick = async () => {
-        try {
-          await chrome.management.setEnabled(keplr.id, false);
-          bannerEl.classList.remove("show");
-        } catch {
-          disableKeplrBtn.textContent = "Couldn't disable — do it manually";
-        }
-      };
-    }
   } catch {
-    /* management not granted; skip the banner */
+    return undefined;
+  }
+}
+
+async function setKeplrEnabled(enabled: boolean): Promise<void> {
+  const keplr = await findKeplr();
+  if (keplr && keplr.enabled !== enabled) {
+    try {
+      await chrome.management.setEnabled(keplr.id, enabled);
+    } catch {
+      /* user declined or not permitted; the banner will reflect reality */
+    }
+  }
+}
+
+async function reloadOsmosisTabs(): Promise<void> {
+  try {
+    const tabs = await chrome.tabs.query({ url: OSMOSIS_URLS });
+    await Promise.all(tabs.map((t) => (t.id != null ? chrome.tabs.reload(t.id) : undefined)));
+  } catch {
+    /* no tabs permission for this; the hint tells the user to reload */
+  }
+}
+
+toggleBtn.addEventListener("click", async () => {
+  const state = await readState();
+  const next = !state.overrideEnabled;
+  state.overrideEnabled = next;
+  await writeState(state);
+  // Override ON  -> our provider owns window.keplr, so disable the real Keplr.
+  // Override OFF -> hand control back by re-enabling the real Keplr.
+  await setKeplrEnabled(!next);
+  await reloadOsmosisTabs();
+  await refresh();
+});
+
+async function updateBanner(state: StorageState): Promise<void> {
+  // Only a concern while we are meant to be in control.
+  if (!state.overrideEnabled) {
+    bannerEl.classList.remove("show");
+    return;
+  }
+  const keplr = await findKeplr();
+  if (keplr?.enabled) {
+    bannerEl.classList.add("show");
+    disableKeplrBtn.onclick = async () => {
+      await setKeplrEnabled(false);
+      await reloadOsmosisTabs();
+      await refresh();
+    };
+  } else {
+    bannerEl.classList.remove("show");
   }
 }
 
 void refresh();
-void checkKeplrConflict();
