@@ -39,7 +39,19 @@ for pure read-only: estimates still render, but clicking Approve will not broadc
 
 Osmosis only for now.
 
-## Build & install
+## Install
+
+### From a release (no build needed)
+
+1. Download `osmosis-readonly-wallet-vX.Y.Z.zip` from the
+   [Releases page](https://github.com/jasbanza/osmosis-readonly-wallet/releases).
+2. Unzip it. You get a folder named `osmosis-readonly-wallet`.
+3. Open `chrome://extensions` in a Chromium browser (Chrome, Brave, or Edge; version 111+).
+4. Enable **Developer mode** (top-right toggle).
+5. Click **Load unpacked** and select the unzipped `osmosis-readonly-wallet` folder.
+6. Open the toolbar's extensions menu and pin **Osmosis Read-Only Wallet**.
+
+### Build from source
 
 ```bash
 npm install
@@ -48,13 +60,28 @@ npm run watch        # rebuild on change
 npm run typecheck
 ```
 
-1. Open `chrome://extensions`, enable **Developer mode**.
-2. **Load unpacked** → select the `dist/` folder.
-3. Click the extension icon, paste an `osmo1…` address, and select it.
-4. On osmosis.zone, connect wallet → **Keplr**.
+Then load the `dist/` folder as the unpacked extension (steps 3-6 above).
 
-A real Keplr extension conflicts (both set `window.keplr`). The popup detects an enabled
-Keplr and offers to disable it; alternatively use a separate Chrome profile.
+## Using it
+
+1. Click the pinned icon to open the popup.
+2. Paste an `osmo1…` address, add an optional label, and click **Add**.
+3. Select the address with its radio button — that is the active one.
+4. On [app.osmosis.zone](https://app.osmosis.zone), connect wallet → **Keplr**. The app
+   shows that address's real balances, portfolio, and history, with working gas estimates
+   on the trade confirm screen.
+5. **Mock tx** (checkbox, per address): fakes a successful transaction so you can walk the
+   full swap/confirm flow without touching chain. Leave it off for pure read-only —
+   estimates still render, but Approve will not broadcast.
+6. **Hand to Keplr** (button): turns the override off and re-enables the real Keplr, so the
+   extension steps aside without being removed. The popup border turns red while the
+   override is off. **Re-enable mock** turns it back on.
+
+Switching the active address updates the connected app live, with no reload.
+
+A real Keplr extension conflicts, because both set `window.keplr`. The popup detects an
+enabled Keplr and offers a one-click button to disable it; alternatively, use a separate
+Chrome profile.
 
 ## Limitations
 
